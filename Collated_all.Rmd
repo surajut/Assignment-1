@@ -1,6 +1,6 @@
 ---
 title: "Predictive Modeling - Assignment 1"
-author: "Suraj"
+author: "Sooraaaj"
 date: "August 7, 2015"
 output: word_document
 ---
