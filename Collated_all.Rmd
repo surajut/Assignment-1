@@ -1,0 +1,507 @@
+---
+title: "Predictive Modeling - Assignment 1"
+author: "Suraj"
+date: "August 7, 2015"
+output: word_document
+---
+## Question 2
+###Objective:
+* Assess risk/return properties of the five major asset classes.
+* Compare the results for 3 differently designed portfolio.
+
+### Loading required libraries and downloading data for 5 asset classes for a period of 5 years
+```{r include = FALSE, warning = FALSE, messages = FALSE} 
+library(mosaic)
+library(fImport)
+library(foreach)
+
+mystocks = c("SPY","TLT", "LQD", "EEM","VNQ")
+myprices = yahooSeries(mystocks, from='2010-07-30', to='2015-07-30')
+```
+
+
+### Creating a helper function for calculating percent returns for the 5 stocks
+```{r}
+YahooPricesToReturns = function(series) {
+  mycols = grep('Adj.Close', colnames(series))
+  closingprice = series[,mycols]
+  N = nrow(closingprice)
+  percentreturn = as.data.frame(closingprice[2:N,]) / as.data.frame(closingprice[1:(N-1),]) - 1
+  mynames = strsplit(colnames(percentreturn), '.', fixed=TRUE)
+  mynames = lapply(mynames, function(x) return(paste0(x[1], ".PctReturn")))
+  colnames(percentreturn) = mynames
+  as.matrix(na.omit(percentreturn))
+}
+```
+
+### Compute the returns from the closing prices for the entire period of 5 years
+
+
+```{r}
+myreturns = YahooPricesToReturns(myprices)
+```
+
+
+### Simulating returns of each stock to assess it's risk - Using Bootstrapping AND Looping over 4 trading weeks(20 days) with initial investment of $100,000
+* Each of the portfolios below is essentially one stock
+**Asset : SPY**
+
+```{r}
+set.seed(1)
+n_days = 20
+sim_SPY_returns = foreach(i=1:2000, .combine='rbind') %do% {
+  totalwealth = 100000
+  weights = c(1,0,0,0,0)
+  holdings = weights * totalwealth
+  wealthtracker = rep(0, n_days) # Set up a placeholder to track total wealth
+  for(today in 1:n_days) {
+    return.today = resample(myreturns, 1, orig.ids=FALSE)
+    holdings = holdings + holdings*return.today
+    totalwealth = sum(holdings)
+    wealthtracker[today] = totalwealth
+  }
+  wealthtracker
+}
+
+hist(sim_SPY_returns[,n_days]- 100000, 25) #profit and loss histogram
+quantile(sim_SPY_returns[,n_days], 0.05) - 100000
+
+```
+
+**Asset :   TLT**
+
+```{r}
+set.seed(1)
+n_days = 20
+sim_TLT_returns = foreach(i=1:2000, .combine='rbind') %do% {
+  totalwealth = 100000
+  weights = c(0,1,0,0,0)
+  holdings = weights * totalwealth
+  wealthtracker = rep(0, n_days) # Set up a placeholder to track total wealth
+  for(today in 1:n_days) {
+    return.today = resample(myreturns, 1, orig.ids=FALSE)
+    holdings = holdings + holdings*return.today
+    totalwealth = sum(holdings)
+    wealthtracker[today] = totalwealth
+  }
+  wealthtracker
+}
+
+hist(sim_TLT_returns[,n_days]- 100000, 25) #profit and loss histogram
+quantile(sim_TLT_returns[,n_days], 0.05) - 100000
+
+```
+**Asset :   LQD**
+
+```{r}
+set.seed(1)
+n_days = 20
+sim_LQD_returns = foreach(i=1:2000, .combine='rbind') %do% {
+  totalwealth = 100000
+  weights = c(0,0,1,0,0)
+  holdings = weights * totalwealth
+  wealthtracker = rep(0, n_days) # Set up a placeholder to track total wealth
+  for(today in 1:n_days) {
+    return.today = resample(myreturns, 1, orig.ids=FALSE)
+    holdings = holdings + holdings*return.today
+    totalwealth = sum(holdings)
+    wealthtracker[today] = totalwealth
+  }
+  wealthtracker
+}
+
+hist(sim_LQD_returns[,n_days]- 100000, 25) #profit and loss histogram
+quantile(sim_LQD_returns[,n_days], 0.05) - 100000
+
+```
+
+**Asset :   EEM**
+
+```{r}
+set.seed(1)
+n_days = 20
+sim_EEM_returns = foreach(i=1:2000, .combine='rbind') %do% {
+  totalwealth = 100000
+  weights = c(0,0,0,1,0)
+  holdings = weights * totalwealth
+  wealthtracker = rep(0, n_days) # Set up a placeholder to track total wealth
+  for(today in 1:n_days) {
+    return.today = resample(myreturns, 1, orig.ids=FALSE)
+    holdings = holdings + holdings*return.today
+    totalwealth = sum(holdings)
+    wealthtracker[today] = totalwealth
+  }
+  wealthtracker
+}
+
+hist(sim_EEM_returns[,n_days]- 100000, 25) #profit and loss histogram
+quantile(sim_EEM_returns[,n_days], 0.05) - 100000
+
+```
+**Asset :   VNQ**
+
+```{r}
+set.seed(1)
+n_days = 20
+sim_VNQ_returns = foreach(i=1:2000, .combine='rbind') %do% {
+  totalwealth = 100000
+  weights = c(0,0,0,0,1)
+  holdings = weights * totalwealth
+  wealthtracker = rep(0, n_days) # Set up a placeholder to track total wealth
+  for(today in 1:n_days) {
+    return.today = resample(myreturns, 1, orig.ids=FALSE)
+    holdings = holdings + holdings*return.today
+    totalwealth = sum(holdings)
+    wealthtracker[today] = totalwealth
+  }
+  wealthtracker
+}
+
+hist(sim_VNQ_returns[,n_days]- 100000, 25) #profit and loss histogram
+quantile(sim_VNQ_returns[,n_days], 0.05) - 100000
+```
+###Observaations:
+* EEM and VNQ are the riskiest assets because their profit/loss histogram have longer tails indicating many more 'bad days' comparitively. They also have a higher value at risk at alpha = 5%.
+* TLT, SPY and LQD are the relatively safer stocks.
+* In order of the value at risk at 5% (Risky to Safe) : EEM>VNQ>TLT>SPY>LQD
+
+###Running Monte Carlo simulations to simulate 4 trading weeks for 3 different portfolios
+**Even Split Portfolio**
+```{r}
+set.seed(1)
+sim1_evensplit = foreach(i=1:5000, .combine='rbind') %do% {
+  totalwealth = 100000
+  weights = c(0.2, 0.2, 0.2, 0.2, 0.2)
+  holdings = weights * totalwealth
+  n_days = 20
+  wealthtracker = rep(0, n_days) # Set up a placeholder to track total wealth
+  for(today in 1:n_days) {
+    return.today = resample(myreturns, 1, orig.ids=FALSE)
+    holdings = weights * totalwealth #make sure wealth is redistributed
+    holdings = holdings + holdings*return.today 
+    totalwealth = sum(holdings)
+    wealthtracker[today] = totalwealth
+    holdings = weights * totalwealth #Rebalancing
+  }
+  wealthtracker
+}
+totalwealth  #102769.3
+
+hist(sim1_evensplit[,n_days]- 100000)
+quantile(sim1_evensplit[,n_days], 0.05) - 100000  #-3519.02 
+
+```
+**Risky Portfolio**
+Portfolio made up of the 3 riskiest assets EEM, VNQ and TLT with a heavy focus on the riskiest asset - EEM
+```{r}
+set.seed(1)
+sim1_risky = foreach(i=1:5000, .combine='rbind') %do% {
+  totalwealth = 100000
+  weights = c(0, 0.15, 0, 0.7, 0.15)
+  holdings = weights * totalwealth
+  n_days = 20
+  wealthtracker = rep(0, n_days) # Set up a placeholder to track total wealth
+  for(today in 1:n_days) {
+    return.today = resample(myreturns, 1, orig.ids=FALSE)
+    holdings = weights * totalwealth #make sure wealth is redistributed
+    holdings = holdings + holdings*return.today 
+    totalwealth = sum(holdings)
+    wealthtracker[today] = totalwealth
+    holdings = weights * totalwealth  # Rebalancing
+  }
+  wealthtracker
+}
+totalwealth  #101945.2
+
+hist(sim1_risky[,n_days]- 100000) 
+quantile(sim1_risky[,n_days], 0.05) - 100000  #-7256
+
+```
+
+**Safe Portfolio**
+Portfolio made up mostly of the safest asset LQD and a bit of slightly less safer assets SPY and TLT
+```{r}
+set.seed(1)
+sim1_safe = foreach(i=1:5000, .combine='rbind') %do% {
+  totalwealth = 100000
+  weights = c(0.05, 0.15, 0.8, 0, 0)
+  holdings = weights * totalwealth
+  n_days = 20
+  wealthtracker = rep(0, n_days) # Set up a placeholder to track total wealth
+  for(today in 1:n_days) {
+    return.today = resample(myreturns, 1, orig.ids=FALSE)
+    holdings = weights * totalwealth #make sure wealth is redistributed
+    holdings = holdings + holdings*return.today 
+    totalwealth = sum(holdings)
+    wealthtracker[today] = totalwealth
+    holdings = weights * totalwealth   # Rebalancing
+  }
+  wealthtracker
+}
+totalwealth  #101,596
+
+hist(sim1_safe[,n_days]- 100000) 
+quantile(sim1_safe[,n_days], 0.05) - 100000  #-2435
+
+```
+###Summary
+* Even Split: TotalWealth: 102,769   Risk at 5%: -3519
+* Risky     : TotalWealth: 101,945   Risk at 5%: -7256
+* Safe      : TotalWealth: 101,596   Risk at 5%: -2435
+If we take the 'value at risk at alpha = 5%' as a measure of the risk associated with a protfolio, it can be observed that
+the 'Risky' portfolio is indeed the riskiest and the 'safe' portfolio the safest. 
+
+###Interpretation
+* One way to represent the 3 portfolios and their differing risk characterisitcs would be to compare their profit/loss histograms
+* The below histograms clearly tells the user that
+
+```{r}
+
+```
+
+****************
+## Question 3
+###Objective:
+* Compare 2 methods in their ability to distinguish a set of wines based on their color and quality
+
+###Importing dataset
+```{r}
+winedata = read.csv("https://raw.githubusercontent.com/jgscott/STA380/master/data/wine.csv", header=TRUE)
+```
+###Removing Quality and Color variables from the original dataset, Scaling the dataset and running kmeans
+
+```{r}
+winedata_num = winedata[,1:11]
+winedata_scaled <- scale(winedata_num, center=TRUE, scale=TRUE)
+winedata_clustered <- kmeans(winedata_scaled, centers=2, nstart=50)
+```
+##Checking if k-means can help us distinguish Red from White wine
+*Plotting Red and White wine and then superimposing predictions from the k-means clustering technique
+*After superimposing it can be seen that k-means was able to cluster effectively. 
+```{r}
+qplot(winedata$color)
+qplot(winedata$color, fill = factor(winedata_clustered$cluster) )
+```
+
+###Calculating accuracy% of clustering using a contingency table and proportions
+
+```{r}
+color_accuracy = table(winedata$color,winedata_clustered$cluster)
+color_accuracy2 = prop.table(color_accuracy, margin =1)
+head(color_accuracy2*100)
+```
+**Conclusion : k-means clustering technique does a very good job at distinguishing red wine from white wine**
+
+###Checking if k-means can help us distinguish the quality of wine
+*Plotting to show distribution of wines by quality and then superimposing predictions from the k-means clustering technique
+*After superimposing it can be seen that k-means was not able to cluster effectively
+
+```{r}
+winedata_clustered_qual <- kmeans(winedata_scaled, centers= 7,iter.max= 50, nstart=50)
+qplot(winedata$quality)
+qplot(winedata$quality, fill = factor(winedata_clustered_qual$cluster) )
+```
+###Calculating accuracy% of clustering using a contingency table and proportions
+
+```{r}
+quality_accuracy = table(winedata$quality,winedata_clustered_qual$cluster)
+quality_accuracy2 = prop.table(quality_accuracy, margin =1)
+head(quality_accuracy2*100)
+```
+**Conclusion : k-means clustering technique does not do a good job at distinguishing high-quality wine from a low-quality wine**
+***********************
+###Checking if PCA can help us distinguish wines
+*Run principal component analysis
+*Pulling vectors and alpha values from the principal component analysis output
+*Plot to see how the various multiple Principal components capture the variance of original data points
+```{r}
+PC_wine = prcomp(winedata_num, scale=TRUE)
+loadings_wine = PC_wine$rotation
+scores = PC_wine$x
+plot(PC_wine)
+```
+
+
+
+
+
+
+head(loadings_wine)
+
+# Plotting projections of points on the first 2 principal components
+qplot(scores[,1], scores[,2], xlab='Component 1', ylab='Component 2')
+# 2 distinct groups can be seen in this PCA plot. Superimposing actual colors to check how separated these groups are..
+qplot(scores[,1], scores[,2], color = winedata$color, xlab='Component 1', ylab='Component 2')
+# It can be seen from the above plot that using PCA helps distinguish Red wine from White wine..
+
+#Checking to see if the first Principal Component alone helps distinguish the wines
+qplot(scores[,1], xlab='Component 1')
+qplot(scores[,1], fill = winedata$color, xlab='Component 1')
+
+
+
+
+
+
+****************
+## Question 4
+###Objective:
+* Pre-process data and Cluster users into multiple market segments 
+* Characterize these segments and identify those which appear to stand out in their social-media audience 
+
+### Importing the dataset, Removing the 'Users' column(so we can scale) and scaling the numeric dataset
+```{r}
+set.seed(5)
+segmentation = read.csv("https://raw.githubusercontent.com/jgscott/STA380/master/data/social_marketing.csv", header=TRUE)
+segmentation = segmentation[,-1]
+segmentation_scaled <- scale(segmentation, center=TRUE, scale=TRUE)
+```
+
+
+###Deciding the number of clusters
+* The denser the clusters and the more distant the clusters from each other the better.
+* In the plots shown, the 'Within groups sum of Squares' value drops sharply with increasing #of clusters. But it starts levelling around '10' clusters.
+* Also the 'Between groups sum of Squares' does not increase appreciably beyond '10' clusters.
+* Hence  going ahead with k = 10 for the k-means model
+
+
+```{r}
+wss <- (nrow(segmentation_scaled)-1)*sum(apply(segmentation_scaled,2,var))
+for (i in 2:30) wss[i] <- sum(kmeans(segmentation_scaled,centers=i, iter.max = 20)$withinss)
+plot(1:30, wss, type="b", xlab="Number of Clusters", ylab="Within groups sum of squares")
+
+bss <- (nrow(segmentation_scaled)-1)*sum(apply(segmentation_scaled,2,var))
+for (i in 2:30) bss[i] <- sum(kmeans(segmentation_scaled,centers=i, iter.max = 20)$betweenss)
+plot(1:30, bss, type="b", xlab="Number of Clusters", ylab="Between groups sum of squares")
+```
+
+* In the plots shown, the 'Within groups sum of Squares' value drops sharply with increasing #of clusters. But it starts levelling around '10' clusters.
+* Also the 'Between groups sum of Squares' does not increase appreciably beyond '10' clusters.
+* Hence  going ahead with k = 10 for the k-means model
+
+
+###Clustering using k=10
+```{r}
+set.seed(1234)
+clustered <- kmeans(segmentation_scaled, centers=10,iter.max = 30, nstart=50)
+```
+
+###Extracting attributes that would help us characterize the clusters from the output
+*'Center' gives us the cluster center which (mean of all users within that cluster). Hence it's a proxy for the users in that cluster
+
+```{r}
+head(clustered$centers ) # Checking out how the first few records look
+mean = attr(segmentation_scaled,"scaled:center")
+std_dev =attr(segmentation_scaled,"scaled:scale")
+clustered$centers[1,] # Scaled center of 1st cluster
+clustered$centers[1,]*std_dev + mean # Unscaled center of 1st cluster
+```
+To characterize each cluster, it helps to look at the scaled and unscaled center value of each cluster with repect to all of the twitter interests.
+
+If the standard deviation is greater than 2 then that interest can be labeled significant (above 95%) for that particular cluster. If the second row, which shows the average number of tweets classified under that interest for that cluster also turns out to be significantly large, then the cluster can be characterized by that feature/interest  
+
+
+The clusters have been profiled. Each cluster's characteritics have been listed below and given a name.
+The output that helped characterize these clusters is at the end of the document.
+
+1) Cluster 1 : SPORTS_PLAYING, ONLINE_GAMING, COLLEGE_UNI  
+CLUSTER NAME : COLLEGE GOERS  
+
+2) Cluster 2 : COMPUTERS, FOOD, PHOTO-SHARING  
+Probably someone tech-savvy, who is into food-porn and shares food pics on Instagram and tweets abot food.  
+CLUSTER NAME : FOOD BLOGGERS  
+
+3) Cluster 3 : None OF THE FEATURES STAND OUT  
+CLUSTER NAME :   
+
+4) Cluster 4 : NONE OF THE FEATURES STAND OUT  
+CLUSTER NAME :  
+
+5) Cluster 5 : ART, TV_FILM  
+CLUSTER NAME : THE ARTSY GUYS/GIRLS  
+
+6) Cluster 6 : SPORTS_FANDOM, RELIGION, PARENTING, FOOD   
+CLUSTER NAME : PARENTS (THE PREVIOUS GENERATION)  
+
+7) Cluster 7 : SPAM, ADULT  
+CLUSTER NAME : BOTS_KINGDOM  
+
+8) Cluster 8 : HEALTH_NUTRITION, PERSONAL_FITNESS  
+CLUSTER NAME : FITNESS FREAKS  
+
+9) Cluster 9 : AUTOMOTIVE, NEWS  
+CLUSTER NAME : NO APT NAME. CLUSTER IS PROBABLY CHARACTERIZED BY A SIGNIFICANT MALE POPULATION WHO LIKE CARS, WATCH NEWS AND TWEET ABOUT THEM  
+
+10) Cluster 10 : FASHION, COOKING, BEAUTY  
+CLUSTER NAME   : TRENDY HOME MAKERS 
+
+
+
+
+
+###cluster1
+
+```{r}
+rbind(clustered$center[1,],(clustered$center[1,]*std_dev + mean))
+```
+###cluster2
+
+```{r}
+rbind(clustered$center[2,],(clustered$center[2,]*std_dev + mean))
+```
+###cluster3
+
+```{r}
+rbind(clustered$center[3,],(clustered$center[3,]*std_dev + mean))
+```
+###cluster4
+
+```{r}
+rbind(clustered$center[4,],(clustered$center[4,]*std_dev + mean))
+```
+###cluster5
+
+```{r}
+rbind(clustered$center[5,],(clustered$center[5,]*std_dev + mean))
+```
+###cluster6
+
+```{r}
+rbind(clustered$center[6,],(clustered$center[6,]*std_dev + mean))
+```
+###cluster7
+
+```{r}
+rbind(clustered$center[7,],(clustered$center[7,]*std_dev + mean))
+```
+###cluster8
+
+```{r}
+rbind(clustered$center[8,],(clustered$center[8,]*std_dev + mean))
+```
+###cluster9
+
+```{r}
+rbind(clustered$center[9,],(clustered$center[9,]*std_dev + mean))
+```
+###cluster10
+
+```{r}
+rbind(clustered$center[10,],(clustered$center[10,]*std_dev + mean))
+```
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
