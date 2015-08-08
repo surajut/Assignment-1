@@ -1,0 +1,669 @@
+---
+title: "Predictive Modeling - Assignment 1"
+author: "Suraj Tata Prasad"
+date: "August 7, 2015"
+output: word_document
+---
+## Question 1
+###Objective is to illuminate on the below issues:
+* Whether voting certain kinds of voting equipment lead to higher rates of undercount
+* Whether we should worry that this effect has a disparate impact on poor and minority communities.
+
+
+```{r include = FALSE, warning = FALSE, messages = FALSE}
+library(ggplot2)
+```
+
+###Import dataset
+```{r}
+georgia = read.csv("https://raw.githubusercontent.com/jgscott/STA380/master/data/georgia2000.csv", header=TRUE)
+```
+###Change categorical variables `poor`, `urban`, and `atlanta` from  'int' to 'factor' so that they are interpreted as  categorical variables 
+
+```{r}
+georgia$poor = factor(georgia$poor)
+georgia$urban = factor(georgia$urban)
+georgia$atlanta = factor(georgia$atlanta)
+```
+
+
+### Checking for performance of equipment in general with respect to undercount percentage
+* It can be observed from the barplot that the undercount% is about the same for all equipments 
+* **So, equipment alone does not decide higher or lower undercount%s**
+
+```{r}
+georgia$diff = (georgia$ballots - georgia$votes)
+equip_diffagg = aggregate(diff ~ equip, georgia,sum)
+equip_ballotagg = aggregate(ballots ~ equip, georgia,sum)
+equip_diffagg$uc_perc = (equip_diffagg$diff / equip_ballotagg$ballots)*100
+equip_diffagg2 = data.frame(equip_diffagg$equip,equip_diffagg$uc_perc)
+par(mfrow=c(1,1))
+barplot(equip_diffagg2$equip_diffagg.uc_perc,names.arg = equip_diffagg2$equip_diffagg.equip,main = 'Undercount% by Equipment type' )
+```
+
+**************
+### Checking effect of 'poor counties' in the equipment v/s undercount percentage graph
+* Can be observed that regardless of the equipment, poor counties have more undercounting %
+
+
+```{r}
+georgia$diff = (georgia$ballots - georgia$votes)
+eq_poorp2 = aggregate(diff ~ equip + poor, georgia,sum)
+eq_poorp3 = aggregate(ballots ~ equip + poor, georgia,sum)
+eq_poorp4 = merge(eq_poorp2, eq_poorp3, by=c("equip","poor"))
+eq_poorp4$undercount_perc = (eq_poorp4$diff / eq_poorp4$ballots)*100
+ggplot(data=eq_poorp4, aes(x=equip, y=undercount_perc, fill=poor)) +  geom_bar(stat="identity", position=position_dodge(), colour="black")
+```
+
+***************
+### Checking effect of 'urbanicity' in the equipment v/s undercount percentage graph
+* Can be observed that regardless of the equipment, non-urban counties have more undercounting %
+
+
+```{r}
+georgia$diff = (georgia$ballots - georgia$votes)
+eq_urban = aggregate(diff ~ equip + urban, georgia,sum)
+eq_urban2 = aggregate(ballots ~ equip + urban, georgia,sum)
+eq_urban3 = merge(eq_urban, eq_urban2, by=c("equip","urban"))
+eq_urban3$undercount_perc = (eq_urban3$diff / eq_urban3$ballots)*100
+ggplot(data=eq_urban3, aes(x=equip, y=undercount_perc, fill=urban)) +  geom_bar(stat="identity", position=position_dodge(), colour="black")
+```
+
+***************
+### Checking effect of 'atlanta/non atlanta' in the equipment v/s undercount percentage graph
+* The plot shows that whether a county is in Atlanta or not does not affect undercount_perc much
+* Moreover, most of the counties are non-atlanta counties. Hence this plot does not give any valuable information
+
+```{r}
+georgia$diff = (georgia$ballots - georgia$votes)
+eq_atlanta = aggregate(diff ~ equip + atlanta, georgia,sum)
+eq_atlanta2 = aggregate(ballots ~ equip + atlanta, georgia,sum)
+eq_atlanta3 = merge(eq_atlanta, eq_atlanta2, by=c("equip","atlanta"))
+eq_atlanta3$undercount_perc = (eq_atlanta3$diff / eq_atlanta3$ballots)*100
+ggplot(data=eq_atlanta3, aes(x=equip, y=undercount_perc, fill=atlanta)) +  geom_bar(stat="identity", position=position_dodge(), colour="black")
+```
+
+***************
+### Checking effect of 'AA population' in the equipment v/s undercount percentage graph
+* If AA population is > 30% then 1, else 0 as the new AA flag.
+* Can be observed that regardless of the equipment, counties with high AA population have more undercounting %
+
+```{r}
+georgia$AA_flag<-with(georgia,ifelse(perAA>0.3,1,0)) #Created 2 buckets from the continuous variable
+georgia$AA_flag = factor(georgia$AA_flag)
+georgia$diff = (georgia$ballots - georgia$votes)
+eq_AA = aggregate(diff ~ equip + AA_flag, georgia,sum)
+eq_AA2 = aggregate(ballots ~ equip + AA_flag, georgia,sum)
+eq_AA3 = merge(eq_AA, eq_AA2, by=c("equip","AA_flag"))
+eq_AA3$undercount_perc = (eq_AA3$diff / eq_AA3$ballots)*100
+ggplot(data=eq_AA3, aes(x=equip, y=undercount_perc, fill=AA_flag)) +  geom_bar(stat="identity", position=position_dodge(), colour="black")
+```
+
+##Conclusion
+* Certain kinds of voting equipment alone do not lead to higher rates/lower rates of undercount.
+* Poor counties, minority communities and non-urban areas have higher undercount %s for the same types of equipment(regardless of the tyoe of equipment).
+
+******************************************************
+******************************************************
+
+## Question 2
+###Objective:
+* Assess risk/return properties of the five major asset classes.
+* Compare the results for 3 differently designed portfolio.
+
+
+```{r include = FALSE, warning = FALSE, messages = FALSE} 
+library(mosaic)
+library(fImport)
+library(foreach)
+```
+
+
+### Downloading data for 5 asset classes for a period of 5 years and creating a helper function for calculating percent returns for the 5 stocks
+```{r}
+mystocks = c("SPY","TLT", "LQD", "EEM","VNQ")
+myprices = yahooSeries(mystocks, from='2010-07-30', to='2015-07-30')
+
+YahooPricesToReturns = function(series) {
+  mycols = grep('Adj.Close', colnames(series))
+  closingprice = series[,mycols]
+  N = nrow(closingprice)
+  percentreturn = as.data.frame(closingprice[2:N,]) / as.data.frame(closingprice[1:(N-1),]) - 1
+  mynames = strsplit(colnames(percentreturn), '.', fixed=TRUE)
+  mynames = lapply(mynames, function(x) return(paste0(x[1], ".PctReturn")))
+  colnames(percentreturn) = mynames
+  as.matrix(na.omit(percentreturn))
+}
+```
+
+### Computing the returns from the closing prices for the entire period of 5 years
+
+
+```{r}
+myreturns = YahooPricesToReturns(myprices)
+```
+
+
+### Simulating returns of each stock to assess it's risk - Using Bootstrapping AND Looping over 4 trading weeks(20 days) with initial investment of $100,000
+* Each of the portfolios below is essentially one stock  
+**Asset : SPY**
+
+```{r}
+set.seed(1)
+n_days = 20
+sim_SPY_returns = foreach(i=1:2000, .combine='rbind') %do% {
+  totalwealth = 100000
+  weights = c(1,0,0,0,0)
+  holdings = weights * totalwealth
+  wealthtracker = rep(0, n_days) # Set up a placeholder to track total wealth
+  for(today in 1:n_days) {
+    return.today = resample(myreturns, 1, orig.ids=FALSE)
+    holdings = holdings + holdings*return.today
+    totalwealth = sum(holdings)
+    wealthtracker[today] = totalwealth
+  }
+  wealthtracker
+}
+
+hist(sim_SPY_returns[,n_days]- 100000, 25) #profit and loss histogram
+quantile(sim_SPY_returns[,n_days], 0.05) - 100000
+
+```
+
+**Asset :   TLT**
+
+```{r}
+set.seed(1)
+n_days = 20
+sim_TLT_returns = foreach(i=1:2000, .combine='rbind') %do% {
+  totalwealth = 100000
+  weights = c(0,1,0,0,0)
+  holdings = weights * totalwealth
+  wealthtracker = rep(0, n_days) # Set up a placeholder to track total wealth
+  for(today in 1:n_days) {
+    return.today = resample(myreturns, 1, orig.ids=FALSE)
+    holdings = holdings + holdings*return.today
+    totalwealth = sum(holdings)
+    wealthtracker[today] = totalwealth
+  }
+  wealthtracker
+}
+
+hist(sim_TLT_returns[,n_days]- 100000, 25) #profit and loss histogram
+quantile(sim_TLT_returns[,n_days], 0.05) - 100000
+
+```
+**Asset :   LQD**
+
+```{r}
+set.seed(1)
+n_days = 20
+sim_LQD_returns = foreach(i=1:2000, .combine='rbind') %do% {
+  totalwealth = 100000
+  weights = c(0,0,1,0,0)
+  holdings = weights * totalwealth
+  wealthtracker = rep(0, n_days) # Set up a placeholder to track total wealth
+  for(today in 1:n_days) {
+    return.today = resample(myreturns, 1, orig.ids=FALSE)
+    holdings = holdings + holdings*return.today
+    totalwealth = sum(holdings)
+    wealthtracker[today] = totalwealth
+  }
+  wealthtracker
+}
+
+hist(sim_LQD_returns[,n_days]- 100000, 25) #profit and loss histogram
+quantile(sim_LQD_returns[,n_days], 0.05) - 100000
+
+```
+
+**Asset :   EEM**
+
+```{r}
+set.seed(1)
+n_days = 20
+sim_EEM_returns = foreach(i=1:2000, .combine='rbind') %do% {
+  totalwealth = 100000
+  weights = c(0,0,0,1,0)
+  holdings = weights * totalwealth
+  wealthtracker = rep(0, n_days) # Set up a placeholder to track total wealth
+  for(today in 1:n_days) {
+    return.today = resample(myreturns, 1, orig.ids=FALSE)
+    holdings = holdings + holdings*return.today
+    totalwealth = sum(holdings)
+    wealthtracker[today] = totalwealth
+  }
+  wealthtracker
+}
+
+hist(sim_EEM_returns[,n_days]- 100000, 25) #profit and loss histogram
+quantile(sim_EEM_returns[,n_days], 0.05) - 100000
+
+```
+**Asset :   VNQ**
+
+```{r}
+set.seed(1)
+n_days = 20
+sim_VNQ_returns = foreach(i=1:2000, .combine='rbind') %do% {
+  totalwealth = 100000
+  weights = c(0,0,0,0,1)
+  holdings = weights * totalwealth
+  wealthtracker = rep(0, n_days) # Set up a placeholder to track total wealth
+  for(today in 1:n_days) {
+    return.today = resample(myreturns, 1, orig.ids=FALSE)
+    holdings = holdings + holdings*return.today
+    totalwealth = sum(holdings)
+    wealthtracker[today] = totalwealth
+  }
+  wealthtracker
+}
+
+hist(sim_VNQ_returns[,n_days]- 100000, 25) #profit and loss histogram
+quantile(sim_VNQ_returns[,n_days], 0.05) - 100000
+```
+
+###Observations:
+* EEM and VNQ are the riskiest assets because their profit/loss histogram have longer tails indicating many more 'bad days' comparitively. They also have a higher 'value at risk' at alpha = 5%.
+* TLT, SPY and LQD are the relatively safer stocks.
+* In order of the 'value at risk' (Risky -->  Safe) : EEM>VNQ>TLT>SPY>LQD
+
+###Running Monte Carlo simulations to simulate 4 trading weeks for 3 different portfolios
+### 1) Even Split Portfolio
+
+```{r}
+set.seed(1)
+sim1_evensplit = foreach(i=1:5000, .combine='rbind') %do% {
+  totalwealth = 100000
+  weights = c(0.2, 0.2, 0.2, 0.2, 0.2)
+  holdings = weights * totalwealth
+  n_days = 20
+  wealthtracker = rep(0, n_days) # Set up a placeholder to track total wealth
+  for(today in 1:n_days) {
+    return.today = resample(myreturns, 1, orig.ids=FALSE)
+    holdings = weights * totalwealth #make sure wealth is redistributed
+    holdings = holdings + holdings*return.today 
+    totalwealth = sum(holdings)
+    wealthtracker[today] = totalwealth
+    holdings = weights * totalwealth #Rebalancing
+  }
+  wealthtracker
+}
+totalwealth  #102769.3
+
+hist(sim1_evensplit[,n_days]- 100000)
+quantile(sim1_evensplit[,n_days], 0.05) - 100000  #-3519.02 
+
+```
+
+### 2) Risky Portfolio  
+* Portfolio made up of the 3 riskiest assets EEM, VNQ and TLT with a heavy focus on the riskiest asset - EEM
+
+```{r}
+set.seed(1)
+sim1_risky = foreach(i=1:5000, .combine='rbind') %do% {
+  totalwealth = 100000
+  weights = c(0, 0.15, 0, 0.7, 0.15)
+  holdings = weights * totalwealth
+  n_days = 20
+  wealthtracker = rep(0, n_days) # Set up a placeholder to track total wealth
+  for(today in 1:n_days) {
+    return.today = resample(myreturns, 1, orig.ids=FALSE)
+    holdings = weights * totalwealth #make sure wealth is redistributed
+    holdings = holdings + holdings*return.today 
+    totalwealth = sum(holdings)
+    wealthtracker[today] = totalwealth
+    holdings = weights * totalwealth  # Rebalancing
+  }
+  wealthtracker
+}
+totalwealth  #101945.2
+
+hist(sim1_risky[,n_days]- 100000) 
+quantile(sim1_risky[,n_days], 0.05) - 100000  #-7256
+
+```
+
+### 3) Safe Portfolio 
+* Portfolio made up mostly of the safest asset LQD and a bit of slightly less safer assets SPY and TLT
+
+```{r}
+set.seed(1)
+sim1_safe = foreach(i=1:5000, .combine='rbind') %do% {
+  totalwealth = 100000
+  weights = c(0.05, 0.15, 0.8, 0, 0)
+  holdings = weights * totalwealth
+  n_days = 20
+  wealthtracker = rep(0, n_days) # Set up a placeholder to track total wealth
+  for(today in 1:n_days) {
+    return.today = resample(myreturns, 1, orig.ids=FALSE)
+    holdings = weights * totalwealth #make sure wealth is redistributed
+    holdings = holdings + holdings*return.today 
+    totalwealth = sum(holdings)
+    wealthtracker[today] = totalwealth
+    holdings = weights * totalwealth   # Rebalancing
+  }
+  wealthtracker
+}
+totalwealth  #101,596
+
+hist(sim1_safe[,n_days]- 100000) 
+quantile(sim1_safe[,n_days], 0.05) - 100000  #-2435
+
+```
+
+###Summary
+* Even Split---> TotalWealth = 102,769 and Risk at 5% =  -3519
+* Risky   --->   : TotalWealth = 101,945 and Risk at 5% = -7256
+* Safe   --->     : TotalWealth = 101,596 and Risk at 5% =  -2435
+* If we take the 'value at risk at alpha = 5%' as a measure of the risk associated with a protfolio, it can be observed that
+the 'Risky' portfolio is indeed the riskiest and the 'safe' portfolio the safest. 
+
+###Interpretation
+* One way to represent the 3 portfolios and their differing risk characterisitcs would be to compare their profit/loss histograms
+* The below histograms clearly tells the user that the risky protfolio has much longer/broader tails and more likely to have both very bad days and very good days.
+* The safe portfolio however has much shortertails and does not deviate much from the mean. You might not make too much profit but you are also insulated to an extent against heavy losses in this portfolio
+
+```{r}
+par(mfrow=c(1,3))
+hist(sim1_evensplit[,n_days]- 100000, main = "Profit/Loss")
+hist(sim1_risky[,n_days]- 100000, main = "Profit/Loss")
+hist(sim1_safe[,n_days]- 100000, main = "Profit/Loss")
+```
+
+****************************************
+****************************************
+## Question 3
+###Objective:
+* Compare 2 methods in their ability to distinguish a set of wines based on their color and quality
+
+###Importing dataset
+```{r}
+winedata = read.csv("https://raw.githubusercontent.com/jgscott/STA380/master/data/wine.csv", header=TRUE)
+```
+###Removing Quality and Color variables from the original dataset, scaling the dataset and running kmeans
+
+```{r}
+winedata_num = winedata[,1:11]
+winedata_scaled <- scale(winedata_num, center=TRUE, scale=TRUE)
+winedata_clustered <- kmeans(winedata_scaled, centers=2, nstart=50)
+```
+
+##Checking if k-means can help us distinguish Red from White wine
+* Plotting Red and White wine counts and then superimposing predictions from the k-means clustering technique
+* After superimposing it can be seen that k-means was able to cluster effectively
+
+```{r}
+qplot(winedata$color)
+qplot(winedata$color, fill = factor(winedata_clustered$cluster) )
+```
+
+
+###Calculating accuracy% of clustering using a contingency table and proportions
+
+```{r}
+color_accuracy = table(winedata$color,winedata_clustered$cluster)
+color_accuracy2 = prop.table(color_accuracy, margin =1)
+head(color_accuracy2*100)
+```
+
+**Conclusion : k-means clustering technique does a very good job at distinguishing red wine from white wine**
+
+*********************************
+###Checking if k-means can help us distinguish the quality of wine
+* Plotting to show distribution of wines by quality and then superimposing predictions from the k-means clustering technique
+* After superimposing it can be seen that k-means was not able to cluster effectively
+
+```{r}
+winedata_clustered_qual <- kmeans(winedata_scaled, centers= 7,iter.max= 50, nstart=50)
+qplot(winedata$quality)
+qplot(winedata$quality, fill = factor(winedata_clustered_qual$cluster) )
+```
+
+###Calculating accuracy% of clustering using a contingency table and proportions
+
+```{r}
+quality_accuracy = table(winedata$quality,winedata_clustered_qual$cluster)
+quality_accuracy2 = prop.table(quality_accuracy, margin =1)
+head(quality_accuracy2*100)
+```
+
+**Conclusion : k-means clustering technique does not do a good job at distinguishing high-quality wine from a low-quality wine**
+
+***********************
+
+###Checking if PCA can help us distinguish red wine from white wine
+* Running principal component analysis
+* Pulling vectors and alpha values from the principal component analysis output
+* Plotting to see how the various multiple Principal components capture the variance of original data points
+
+```{r}
+PC_wine = prcomp(winedata_num, scale=TRUE)
+loadings_wine = PC_wine$rotation
+scores = PC_wine$x
+plot(PC_wine)
+```
+
+```{r include = FALSE, warning = FALSE, messages = FALSE} 
+library(ggplot2)
+```
+
+### Plotting projections(alphas) of the first 2 principal components
+* 2 distinct groups can be seen in the first PCA plot. Then i am superimposing actual colors to check how separated these groups are.  
+* It can be seen from the second plot that using PCA helps distinguish Red wine from White wine..
+
+```{r}
+qplot(scores[,1], scores[,2], xlab='Component 1', ylab='Component 2')
+qplot(scores[,1], scores[,2], color = winedata$color, xlab='Component 1', ylab='Component 2')
+
+```
+
+###Checking to see if the projections on the first Principal Component alone helps distinguish the wines
+* First plot does indicate presence 2 clusters
+* On superimposing the actual colors it can be seen that PCA has indeed done a good job in distinguishing the wines
+
+```{r}
+qplot(scores[,1], xlab='Component 1')
+qplot(scores[,1], fill = winedata$color, xlab='Component 1')
+```
+
+***********************************
+
+###Checking if PCA can help us distinguish the quality of wine
+* Plotting projections(alphas) of the first 2 principal components
+* 2 distinct groups can be seen in the first PCA plot. But there are 7 qualities of wine. Superimposing colors(various qualities) to check if there is any clumping the plot indicating an ability to distinguish the wines
+* It can be seen from the second plot that the 7 qualities of wine cannot be distinguished using PCA
+
+```{r}
+qplot(scores[,1], scores[,2], xlab='Component 1', ylab='Component 2')
+qplot(scores[,1], scores[,2], color = winedata$quality, xlab='Component 1', ylab='Component 2')
+```
+
+#Conclusion 
+* Both k-means and PCA do a great job at distinguishing Red wine from white wine
+* Both k-means and PCA cannot distinguish between the quality of wines
+* However, if we could plot,say a 7-D plot with Principal Components(alphas) 1 to 7 as axis, maybe PCA would help us distingish the seven qualities of wines as well. But '7' is too close to the actual dimensions .i.e. '11'. Also, it would be impossible to plot/visualize a 7-D plot.  
+
+************************************
+
+###Plotting to see how the various multiple Principal components capture the variance
+
+```{r}
+plot(PC_wine)
+Std_Dev_PCA = PC_wine$sdev
+Variance_PCA = (Std_Dev_PCA)^2
+Variance_perc = (Variance_PCA/sum(Variance_PCA)) * 100
+qplot(, Variance_perc, xlab='Principal Components', ylab = 'Variance Percentage captured')
+```
+
+### The top features associated with each component 
+```{r}
+o1_wine = order(loadings_wine[,1])
+colnames(winedata)[head(o1_wine,2)]
+colnames(winedata)[tail(o1_wine,2)]
+```
+
+
+
+****************
+## Question 4
+###Objective:
+* Pre-process data and Cluster users into multiple market segments 
+* Characterize these segments and identify those which appear to stand out in their social-media audience 
+
+### Importing the dataset, Removing the 'Users' column(so we can scale) and scaling the numeric dataset
+```{r}
+set.seed(5)
+segmentation = read.csv("https://raw.githubusercontent.com/jgscott/STA380/master/data/social_marketing.csv", header=TRUE)
+segmentation = segmentation[,-1]
+segmentation_scaled <- scale(segmentation, center=TRUE, scale=TRUE)
+```
+
+###Deciding the number of clusters
+* The denser the clusters and the more distant the clusters from each other the better.
+* In the plots shown, the 'Within groups sum of Squares' value drops sharply with increasing #of clusters. But it starts levelling around '10' clusters.
+* Also the 'Between groups sum of Squares' does not increase appreciably beyond '10' clusters.
+* Hence  going ahead with k = 10 for the k-means model
+
+
+```{r}
+wss <- (nrow(segmentation_scaled)-1)*sum(apply(segmentation_scaled,2,var))
+for (i in 2:30) wss[i] <- sum(kmeans(segmentation_scaled,centers=i, iter.max = 20)$withinss)
+plot(1:30, wss, type="b", xlab="Number of Clusters", ylab="Within groups sum of squares")
+
+bss <- (nrow(segmentation_scaled)-1)*sum(apply(segmentation_scaled,2,var))
+for (i in 2:30) bss[i] <- sum(kmeans(segmentation_scaled,centers=i, iter.max = 20)$betweenss)
+plot(1:30, bss, type="b", xlab="Number of Clusters", ylab="Between groups sum of squares")
+```
+
+* In the plots shown, the 'Within groups sum of Squares' value drops sharply with increasing #of clusters. But it starts levelling around '10' clusters.
+* Also the 'Between groups sum of Squares' does not increase appreciably beyond '10' clusters.
+* Hence  going ahead with k = 10 for the k-means model
+
+
+###Clustering using k=10
+```{r}
+set.seed(1234)
+clustered <- kmeans(segmentation_scaled, centers=10,iter.max = 30, nstart=50)
+```
+
+###Extracting attributes that would help us characterize the clusters from the output
+* 'Center' gives us the cluster center which (mean of all users within that cluster). Hence it's a proxy for the users in that cluster
+
+```{r}
+mean = attr(segmentation_scaled,"scaled:center")
+std_dev =attr(segmentation_scaled,"scaled:scale")
+clustered$centers[1,] # Scaled center of 1st cluster
+clustered$centers[1,]*std_dev + mean # Unscaled center of 1st cluster
+```
+
+###Profiling Clusters based on the cluster center 
+* To characterize each cluster, it helps to look at the scaled and unscaled center value of each cluster with repect to all of the twitter interests.
+* If the standard deviation is greater than 2 then that interest can be labeled significant (above 95%) for that particular cluster. 
+* If the second row, which shows the average number of tweets classified under that interest for that cluster also turns out to be significantly large, then the cluster can be characterized by that feature/interest  
+
+
+* **The clusters have been profiled. Each cluster's characteritics have been listed below and given a name**
+* The output that helped characterize these clusters is at the end of the document.
+
+1) Cluster 1 : SPORTS_PLAYING, ONLINE_GAMING, COLLEGE_UNI  
+**CLUSTER NAME : COLLEGE GOERS**  
+
+2) Cluster 2 : COMPUTERS, FOOD, PHOTO-SHARING  
+Probably someone tech-savvy, who is into food-porn and shares food pics on Instagram and tweets abot food.  
+**CLUSTER NAME : FOOD BLOGGERS**  
+
+3) Cluster 3 : None OF THE FEATURES STAND OUT  
+CLUSTER NAME :   
+
+4) Cluster 4 : NONE OF THE FEATURES STAND OUT  
+CLUSTER NAME :  
+
+5) Cluster 5 : ART, TV_FILM  
+**CLUSTER NAME : THE ARTSY GUYS/GIRLS**  
+
+6) Cluster 6 : SPORTS_FANDOM, RELIGION, PARENTING, FOOD   
+CLUSTER NAME : PARENTS (THE PREVIOUS GENERATION)  
+
+7) Cluster 7 : SPAM, ADULT  
+**CLUSTER NAME : BOTS_KINGDOM**  
+
+8) Cluster 8 : HEALTH_NUTRITION, PERSONAL_FITNESS  
+**CLUSTER NAME : FITNESS FREAKS**  
+
+9) Cluster 9 : AUTOMOTIVE, NEWS  
+**CLUSTER NAME : NO APT NAME. CLUSTER IS PROBABLY CHARACTERIZED BY A SIGNIFICANT MALE POPULATION WHO LIKE CARS, WATCH NEWS AND TWEET ABOUT THEM**  
+
+10) Cluster 10 : FASHION, COOKING, BEAUTY  
+**CLUSTER NAME   : TRENDY HOME MAKERS** 
+
+
+
+
+
+###cluster1
+
+```{r}
+rbind(clustered$center[1,],(clustered$center[1,]*std_dev + mean))
+```
+###cluster2
+
+```{r}
+rbind(clustered$center[2,],(clustered$center[2,]*std_dev + mean))
+```
+###cluster3
+
+```{r}
+rbind(clustered$center[3,],(clustered$center[3,]*std_dev + mean))
+```
+###cluster4
+
+```{r}
+rbind(clustered$center[4,],(clustered$center[4,]*std_dev + mean))
+```
+###cluster5
+
+```{r}
+rbind(clustered$center[5,],(clustered$center[5,]*std_dev + mean))
+```
+###cluster6
+
+```{r}
+rbind(clustered$center[6,],(clustered$center[6,]*std_dev + mean))
+```
+###cluster7
+
+```{r}
+rbind(clustered$center[7,],(clustered$center[7,]*std_dev + mean))
+```
+###cluster8
+
+```{r}
+rbind(clustered$center[8,],(clustered$center[8,]*std_dev + mean))
+```
+###cluster9
+
+```{r}
+rbind(clustered$center[9,],(clustered$center[9,]*std_dev + mean))
+```
+###cluster10
+
+```{r}
+rbind(clustered$center[10,],(clustered$center[10,]*std_dev + mean))
+```
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
